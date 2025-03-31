@@ -6,6 +6,22 @@ app = FastAPI()
 
 active_connections = {}
 players = {}
+lobby = {}
+games = 1
+
+@app.websocket("/ws")
+async def lobby_endpoint(websocket: WebSocket):
+    global games
+    global lobby
+    await websocket.accept()
+    if games not in lobby:
+        lobby[games] = []
+    if websocket not in lobby.values():
+        lobby[games].append(websocket)
+        json_mess = json.dumps({"type": "game_id", "game_id": games})
+        await websocket.send_text(json_mess)
+    if len(lobby[games]) == 2:
+        games += 1
 
 @app.websocket("/ws/{game_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
@@ -23,13 +39,20 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     for connection in list(active_connections[game_id]):
         await connection.send_text(join_message)
 
+    if len(active_connections[game_id]) == 2:
+        connections = active_connections[game_id]
+        for connection in connections:
+            await connection.send_text(json.dumps({"type": "start_game"}))
+
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
 
-            print("Odebrana wiadomość:", message)
 
+            if message["type"] == "end_game":
+                for connection in list(active_connections[game_id]):
+                    await connection.send_text(json.dumps({"type": "end_game"}))
             if "type" in message:
                 for connection in list(active_connections[game_id]):
                     await connection.send_text(json.dumps(message))
