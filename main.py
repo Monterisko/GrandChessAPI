@@ -32,12 +32,9 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
     color = "white" if "white" not in players[game_id] else "black"
     players[game_id][color] = websocket
+    await websocket.send_text(json.dumps({"type": "player_joined", "color": color}))
 
     active_connections[game_id].append(websocket)
-
-    join_message = json.dumps({"type": "player_joined", "color": color})
-    for connection in list(active_connections[game_id]):
-        await connection.send_text(join_message)
 
     if len(active_connections[game_id]) == 2:
         connections = active_connections[game_id]
@@ -59,6 +56,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
     except WebSocketDisconnect:
         active_connections[game_id].remove(websocket)
+        if len(active_connections[game_id]) == 1:
+            ws: WebSocket = active_connections[game_id].pop(0)
+            await ws.send_text(json.dumps({"type": "player_left"}))
+            await ws.close()
+
         if not active_connections[game_id]:
             del active_connections[game_id]
         if color in players[game_id]:
